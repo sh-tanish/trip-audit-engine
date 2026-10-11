@@ -16,7 +16,33 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 
+import com.example.tripaudit.config.AuditMetrics;
+import com.example.tripaudit.config.AuditProperties;
+import com.example.tripaudit.domain.AuditRun;
+import com.example.tripaudit.domain.Severity;
+import com.example.tripaudit.domain.Stop;
+import com.example.tripaudit.domain.StopType;
+import com.example.tripaudit.domain.Violation;
+import com.example.tripaudit.domain.ViolationType;
+import com.example.tripaudit.repository.AuditRunRepository;
+import com.example.tripaudit.repository.EmployeeRepository;
+import com.example.tripaudit.repository.GpsFixRepository;
+import com.example.tripaudit.repository.RouteSegmentRepository;
+import com.example.tripaudit.repository.StopRepository;
+import com.example.tripaudit.repository.TripEventRepository;
+import com.example.tripaudit.repository.ViolationRepository;
+import com.example.tripaudit.rules.SafetyRule;
+import com.example.tripaudit.alert.AlertDispatcher;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
+import java.time.Duration;
+import java.time.LocalTime;
+import java.time.ZoneId;
+import java.util.List;
+import java.util.Optional;
+import org.springframework.dao.DataIntegrityViolationException;
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.*;
 
 @SpringBootTest
 class AuditServiceExceptionsTest {
@@ -68,5 +94,106 @@ class AuditServiceExceptionsTest {
             auditService.auditTrip(createdTripId);
         });
         assertTrue(ex.getMessage().contains("is not COMPLETED"));
+    }
+
+    @Test
+    @DisplayName("DataIntegrityViolationException is rethrown if violation does not exist by dedupKey")
+    void dataIntegrityViolationWithoutDedupKeyRethrows() {
+        TripRepository mockTripRepo = mock(TripRepository.class);
+        StopRepository mockStopRepo = mock(StopRepository.class);
+        RouteSegmentRepository mockRouteRepo = mock(RouteSegmentRepository.class);
+        GpsFixRepository mockGpsRepo = mock(GpsFixRepository.class);
+        TripEventRepository mockEventRepo = mock(TripEventRepository.class);
+        EmployeeRepository mockEmpRepo = mock(EmployeeRepository.class);
+        AuditRunRepository mockRunRepo = mock(AuditRunRepository.class);
+        ViolationRepository mockViolRepo = mock(ViolationRepository.class);
+        ViolationRecorder mockRecorder = mock(ViolationRecorder.class);
+        AlertDispatcher mockDispatcher = mock(AlertDispatcher.class);
+        SafetyRule mockRule = mock(SafetyRule.class);
+
+        Trip trip = new Trip(1L, 1L, false, Instant.now());
+        trip.complete(Instant.now());
+        when(mockTripRepo.findById(10L)).thenReturn(Optional.of(trip));
+        when(mockStopRepo.findByTripIdOrderBySequenceAsc(10L)).thenReturn(List.of());
+        when(mockRouteRepo.findByTripIdOrderBySeqAsc(10L)).thenReturn(List.of());
+        when(mockGpsRepo.findByTripIdOrderByRecordedAtAsc(10L)).thenReturn(List.of());
+        when(mockEventRepo.findByTripIdOrderByOccurredAtAsc(10L)).thenReturn(List.of());
+        when(mockRunRepo.save(any(AuditRun.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        Violation candidate = new Violation(
+                10L, ViolationType.NIGHT_SAFETY, Severity.HIGH, "NightRule",
+                "stop-1", 1L, 1L, "evidence", Instant.now(), "run-1"
+        );
+        when(mockRule.evaluate(any())).thenReturn(List.of(candidate));
+
+        doThrow(new DataIntegrityViolationException("Simulated FK failure")).when(mockRecorder).recordIfAbsent(any());
+        when(mockViolRepo.existsByDedupKey(candidate.getDedupKey())).thenReturn(false);
+
+        AuditProperties props = new AuditProperties(
+                ZoneId.of("Asia/Kolkata"),
+                new AuditProperties.Night(LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                new AuditProperties.Route(500.0, Duration.ofSeconds(120)),
+                new AuditProperties.Speed(Duration.ofSeconds(30), 1.5),
+                new AuditProperties.Gps(Duration.ofSeconds(60))
+        );
+
+        AuditService service = new AuditService(
+                mockTripRepo, mockStopRepo, mockRouteRepo, mockGpsRepo, mockEventRepo,
+                mockEmpRepo, mockRunRepo, mockViolRepo, List.of(mockRule), props,
+                mockRecorder, mockDispatcher, new AuditMetrics(new SimpleMeterRegistry())
+        );
+
+        assertThrows(DataIntegrityViolationException.class, () -> service.auditTrip(10L));
+    }
+
+    @Test
+    @DisplayName("AuditService queries only the employee ids on the trip's stops, not findAll()")
+    void auditQueriesOnlyTripEmployees() {
+        TripRepository mockTripRepo = mock(TripRepository.class);
+        StopRepository mockStopRepo = mock(StopRepository.class);
+        RouteSegmentRepository mockRouteRepo = mock(RouteSegmentRepository.class);
+        GpsFixRepository mockGpsRepo = mock(GpsFixRepository.class);
+        TripEventRepository mockEventRepo = mock(TripEventRepository.class);
+        EmployeeRepository mockEmpRepo = mock(EmployeeRepository.class);
+        AuditRunRepository mockRunRepo = mock(AuditRunRepository.class);
+        ViolationRepository mockViolRepo = mock(ViolationRepository.class);
+        ViolationRecorder mockRecorder = mock(ViolationRecorder.class);
+        AlertDispatcher mockDispatcher = mock(AlertDispatcher.class);
+
+        Trip trip = new Trip(1L, 1L, false, Instant.now());
+        trip.complete(Instant.now());
+        when(mockTripRepo.findById(10L)).thenReturn(Optional.of(trip));
+
+        Stop stop1 = new Stop(10L, 1, StopType.PICKUP, 101L, Instant.now(), null);
+        Stop stop2 = new Stop(10L, 2, StopType.DROP, 102L, Instant.now(), "1234");
+        when(mockStopRepo.findByTripIdOrderBySequenceAsc(10L)).thenReturn(List.of(stop1, stop2));
+
+        when(mockRouteRepo.findByTripIdOrderBySeqAsc(10L)).thenReturn(List.of());
+        when(mockGpsRepo.findByTripIdOrderByRecordedAtAsc(10L)).thenReturn(List.of());
+        when(mockEventRepo.findByTripIdOrderByOccurredAtAsc(10L)).thenReturn(List.of());
+        when(mockEmpRepo.findAllById(any())).thenReturn(List.of());
+        when(mockRunRepo.save(any(AuditRun.class))).thenAnswer(inv -> inv.getArgument(0));
+
+        AuditProperties props = new AuditProperties(
+                ZoneId.of("Asia/Kolkata"),
+                new AuditProperties.Night(LocalTime.of(22, 0), LocalTime.of(6, 0)),
+                new AuditProperties.Route(500.0, Duration.ofSeconds(120)),
+                new AuditProperties.Speed(Duration.ofSeconds(30), 1.5),
+                new AuditProperties.Gps(Duration.ofSeconds(60))
+        );
+
+        AuditService service = new AuditService(
+                mockTripRepo, mockStopRepo, mockRouteRepo, mockGpsRepo, mockEventRepo,
+                mockEmpRepo, mockRunRepo, mockViolRepo, List.of(), props,
+                mockRecorder, mockDispatcher, new AuditMetrics(new SimpleMeterRegistry())
+        );
+
+        service.auditTrip(10L);
+
+        verify(mockEmpRepo, times(1)).findAllById(argThat(ids -> {
+            List<Long> list = (List<Long>) ids;
+            return list.contains(101L) && list.contains(102L) && list.size() == 2;
+        }));
+        verify(mockEmpRepo, never()).findAll();
     }
 }

@@ -1,6 +1,8 @@
 package com.example.tripaudit.rules;
 
 import com.example.tripaudit.config.AuditProperties;
+import com.example.tripaudit.detect.GeoMath;
+import com.example.tripaudit.detect.SegmentMatch;
 import com.example.tripaudit.domain.GeoPoint;
 import com.example.tripaudit.domain.GpsFix;
 import com.example.tripaudit.domain.RouteSegment;
@@ -135,6 +137,28 @@ class RouteDeviationRuleTest {
         TripContext ctx = TripContextFactory.create(
                 tripId, "run-1", detectedAt, false,
                 List.of(), List.of(), List.of(segment0), List.of(), List.of(), config
+        );
+
+        List<Violation> violations = rule.evaluate(ctx);
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Distance exactly 500 m off route => no deviation")
+    void distanceExactlyFiveHundredMetersGivesNoDeviation() {
+        Long tripId = 105L;
+        Instant start = Instant.parse("2026-10-11T12:00:00Z");
+
+        // 5 matched fixes 30s apart (duration 120s >= 120s minDuration) with distance exactly 500.0 m (threshold)
+        List<MatchedFix> matchedFixes = new ArrayList<>();
+        for (int i = 0; i < 5; i++) {
+            GpsFix fix = new GpsFix(tripId, start.plusSeconds(i * 30L), 12.9716, 77.6000 + (i * 0.001), 40.0);
+            matchedFixes.add(new MatchedFix(fix, new SegmentMatch(0, 500.0)));
+        }
+
+        TripContext ctx = new TripContext(
+                tripId, "run-1", detectedAt, false,
+                List.of(), java.util.Map.of(), List.of(segment0), matchedFixes, List.of(), config
         );
 
         List<Violation> violations = rule.evaluate(ctx);

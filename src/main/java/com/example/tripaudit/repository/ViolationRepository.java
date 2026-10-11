@@ -19,4 +19,6 @@ public interface ViolationRepository extends Repository<Violation, Long> {
     List<Violation> findByTripIdOrderByDetectedAtAsc(Long tripId);
 
     boolean existsByDedupKey(String dedupKey);
+
+    Optional<Violation> findByDedupKey(String dedupKey);
 }

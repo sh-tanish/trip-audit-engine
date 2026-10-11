@@ -13,7 +13,7 @@ import org.springframework.stereotype.Component;
  * - MEDIUM: DASHBOARD (daily digest / dashboard warning)
  */
 @Component
-public class AlertRoutingPolicy implements AlertRouter, SeverityPolicy {
+public class AlertRoutingPolicy {
 
     private static final Set<AlertChannel> CRITICAL_CHANNELS = Set.of(
             AlertChannel.CONTROL_ROOM,
@@ -28,7 +28,6 @@ public class AlertRoutingPolicy implements AlertRouter, SeverityPolicy {
             AlertChannel.DASHBOARD
     );
 
-    @Override
     public Set<AlertChannel> route(Severity severity) {
         if (severity == null) {
             return Collections.emptySet();

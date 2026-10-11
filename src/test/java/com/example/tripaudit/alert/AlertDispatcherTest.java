@@ -77,7 +77,7 @@ class AlertDispatcherTest {
 
         assertEquals(DeliveryStatus.FAILED, delivery.getStatus());
         assertEquals(1, delivery.getAttempts());
-        assertEquals("SMS gateway timeout", delivery.getLastError());
+        assertEquals(RuntimeException.class.getName(), delivery.getLastError());
         verify(alertDeliveryRepository, times(1)).save(delivery);
 
         // Verify failure counter incremented
@@ -86,6 +86,29 @@ class AlertDispatcherTest {
                 .counter()
                 .count();
         assertEquals(1.0, failedCount);
+    }
+
+    @Test
+    @DisplayName("Failing alertDeliveryRepository.save does not break dispatch and remaining deliveries continue")
+    void failingSaveDoesNotBreakDispatch() {
+        Notifier mockNotifier1 = mock(Notifier.class);
+        Notifier mockNotifier2 = mock(Notifier.class);
+        when(notifierFactory.forChannel(AlertChannel.TRANSPORT_MANAGER)).thenReturn(mockNotifier1);
+        when(notifierFactory.forChannel(AlertChannel.CONTROL_ROOM)).thenReturn(mockNotifier2);
+
+        doThrow(new RuntimeException("DB connection error")).when(alertDeliveryRepository).save(any(AlertDelivery.class));
+
+        Violation violation = new Violation(
+                1L, ViolationType.SOS, Severity.CRITICAL, "SOS",
+                "emp-1:12345", null, 1L, "Emergency panic press", Instant.now(), "run-sos"
+        );
+        AlertDelivery d1 = new AlertDelivery(201L, AlertChannel.TRANSPORT_MANAGER, Instant.now());
+        AlertDelivery d2 = new AlertDelivery(202L, AlertChannel.CONTROL_ROOM, Instant.now());
+
+        assertDoesNotThrow(() -> dispatcher.dispatch(violation, List.of(d1, d2)));
+
+        verify(mockNotifier1, times(1)).send(any(AlertMessage.class));
+        verify(mockNotifier2, times(1)).send(any(AlertMessage.class));
     }
 
     @Test

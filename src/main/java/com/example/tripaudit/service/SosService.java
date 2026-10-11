@@ -2,6 +2,7 @@ package com.example.tripaudit.service;
 
 import com.example.tripaudit.alert.AlertDispatcher;
 import com.example.tripaudit.config.AuditMetrics;
+import com.example.tripaudit.audit.DedupKeys;
 import com.example.tripaudit.domain.AuditRun;
 import com.example.tripaudit.domain.AuditRunKind;
 import com.example.tripaudit.domain.GpsFix;
@@ -10,9 +11,13 @@ import com.example.tripaudit.domain.TripEvent;
 import com.example.tripaudit.domain.TripEventType;
 import com.example.tripaudit.domain.Violation;
 import com.example.tripaudit.domain.ViolationType;
+import com.example.tripaudit.exception.ForbiddenTripAccessException;
+import com.example.tripaudit.exception.NotFoundException;
 import com.example.tripaudit.repository.AuditRunRepository;
 import com.example.tripaudit.repository.GpsFixRepository;
+import com.example.tripaudit.repository.StopRepository;
 import com.example.tripaudit.repository.TripEventRepository;
+import com.example.tripaudit.repository.TripRepository;
 import com.example.tripaudit.repository.ViolationRepository;
 import java.time.Duration;
 import java.time.Instant;
@@ -43,6 +48,8 @@ public class SosService {
     private final ViolationRecorder violationRecorder;
     private final AlertDispatcher alertDispatcher;
     private final AuditMetrics auditMetrics;
+    private final TripRepository tripRepository;
+    private final StopRepository stopRepository;
 
     public SosService(GpsFixRepository gpsFixRepository,
                       TripEventRepository tripEventRepository,
@@ -50,7 +57,9 @@ public class SosService {
                       ViolationRepository violationRepository,
                       ViolationRecorder violationRecorder,
                       AlertDispatcher alertDispatcher,
-                      AuditMetrics auditMetrics) {
+                      AuditMetrics auditMetrics,
+                      TripRepository tripRepository,
+                      StopRepository stopRepository) {
         this.gpsFixRepository = gpsFixRepository;
         this.tripEventRepository = tripEventRepository;
         this.auditRunRepository = auditRunRepository;
@@ -58,38 +67,70 @@ public class SosService {
         this.violationRecorder = violationRecorder;
         this.alertDispatcher = alertDispatcher;
         this.auditMetrics = auditMetrics;
+        this.tripRepository = tripRepository;
+        this.stopRepository = stopRepository;
     }
 
     /**
      * Handles an SOS event for a trip from an explicit TripEvent.
      */
     public Violation handleSos(Long tripId, TripEvent event) {
-        if (event.getId() == null) {
-            tripEventRepository.save(event);
-        }
-        return processSos(tripId, event.getEmployeeId(), event.getOccurredAt());
+        Instant pressedAt = event != null ? event.getOccurredAt() : null;
+        Long employeeId = event != null ? event.getEmployeeId() : null;
+        return handleSos(tripId, employeeId, pressedAt, event);
     }
 
     /**
      * Handles an SOS press by tripId, employeeId, and pressedAt timestamp.
      */
     public Violation handleSos(Long tripId, Long employeeId, Instant pressedAt) {
-        Instant receivedAt = Instant.now();
-        TripEvent event = new TripEvent(tripId, TripEventType.SOS, pressedAt, null, null, employeeId, receivedAt);
-        tripEventRepository.save(event);
-        return processSos(tripId, employeeId, pressedAt);
+        return handleSos(tripId, employeeId, pressedAt, null);
     }
 
-    private Violation processSos(Long tripId, Long employeeId, Instant pressedAt) {
-        Instant now = Instant.now();
+    private Violation handleSos(Long tripId, Long employeeId, Instant pressedAt, TripEvent providedEvent) {
+        // 1. If pressedAt is null, use the server's current time
+        Instant effectivePressedAt = pressedAt != null ? pressedAt : Instant.now();
 
-        // 1. AuditRun of kind SOS
+        // 2. Validate before writing anything
+        if (!tripRepository.existsById(tripId)) {
+            throw new NotFoundException("Trip not found: " + tripId);
+        }
+        if (employeeId == null || !stopRepository.existsByTripIdAndEmployeeId(tripId, employeeId)) {
+            throw new ForbiddenTripAccessException("Employee " + employeeId + " has no stop on trip " + tripId);
+        }
+
+        // 3. Compute dedupKey first
+        String subjectKey = employeeId + ":" + effectivePressedAt.toEpochMilli();
+        String dedupKey = DedupKeys.of(tripId, ViolationType.SOS.name(), subjectKey);
+
+        // If that violation already exists, return existing result without saving a new TripEvent or AuditRun
+        if (violationRepository.existsByDedupKey(dedupKey)) {
+            return violationRepository.findByDedupKey(dedupKey)
+                    .orElseGet(() -> violationRepository.findByTripIdOrderByDetectedAtAsc(tripId).stream()
+                            .filter(v -> v.getDedupKey().equals(dedupKey))
+                            .findFirst()
+                            .orElseThrow());
+        }
+
+        // 4. Save TripEvent
+        if (providedEvent != null && providedEvent.getId() != null) {
+            // Already saved
+        } else {
+            Instant receivedAt = Instant.now();
+            TripEvent eventToSave = (providedEvent != null && providedEvent.getOccurredAt() != null)
+                    ? providedEvent
+                    : new TripEvent(tripId, TripEventType.SOS, effectivePressedAt, null, null, employeeId, receivedAt);
+            tripEventRepository.save(eventToSave);
+        }
+
+        // 5. AuditRun of kind SOS
+        Instant now = Instant.now();
         AuditRun auditRun = new AuditRun(tripId, AuditRunKind.SOS, "EMPLOYEE-" + employeeId, now);
         auditRun = auditRunRepository.save(auditRun);
 
-        // 2. Resolve latest GPS fix at or before the press
+        // 6. Resolve latest GPS fix at or before the press
         Optional<GpsFix> fixOpt = gpsFixRepository
-                .findFirstByTripIdAndRecordedAtLessThanEqualOrderByRecordedAtDesc(tripId, pressedAt);
+                .findFirstByTripIdAndRecordedAtLessThanEqualOrderByRecordedAtDesc(tripId, effectivePressedAt);
 
         Double lat = fixOpt.map(GpsFix::getLat).orElse(null);
         Double lon = fixOpt.map(GpsFix::getLon).orElse(null);
@@ -97,16 +138,15 @@ public class SosService {
         String evidence;
         if (fixOpt.isPresent()) {
             GpsFix fix = fixOpt.get();
-            long ageSeconds = Math.max(0, Duration.between(fix.getRecordedAt(), pressedAt).toSeconds());
+            long ageSeconds = Math.max(0, Duration.between(fix.getRecordedAt(), effectivePressedAt).toSeconds());
             evidence = String.format("SOS raised by employee %d at %s. Location: (%.6f, %.6f), fix age: %ds",
-                    employeeId, pressedAt, fix.getLat(), fix.getLon(), ageSeconds);
+                    employeeId, effectivePressedAt, fix.getLat(), fix.getLon(), ageSeconds);
         } else {
             evidence = String.format("SOS raised by employee %d at %s. Location: unknown (no earlier GPS fix recorded)",
-                    employeeId, pressedAt);
+                    employeeId, effectivePressedAt);
         }
 
-        // 3. Construct candidate violation
-        String subjectKey = employeeId + ":" + pressedAt.toEpochMilli();
+        // 7. Construct candidate violation
         Violation candidate = new Violation(
                 tripId,
                 ViolationType.SOS,
@@ -120,16 +160,21 @@ public class SosService {
                 auditRun.getId()
         );
 
-        // 4. Record idempotently
+        // 8. Record idempotently
         RecordOutcome outcome;
         try {
             outcome = violationRecorder.recordIfAbsent(candidate);
         } catch (DataIntegrityViolationException ex) {
-            log.info("Duplicate SOS press detected for trip {} and subjectKey {}", tripId, subjectKey);
-            outcome = RecordOutcome.existing();
+            // Treat as existing only if existsByDedupKey is true; otherwise rethrow
+            if (violationRepository.existsByDedupKey(candidate.getDedupKey())) {
+                log.info("Duplicate SOS press detected for trip {} and subjectKey {}", tripId, subjectKey);
+                outcome = RecordOutcome.existing();
+            } else {
+                throw ex;
+            }
         }
 
-        // 5. Alert and update AuditRun
+        // 9. Alert and update AuditRun
         if (outcome.status() == RecordOutcome.Status.NEW) {
             auditRun.finish(Instant.now(), 1);
             auditRunRepository.save(auditRun);
@@ -139,10 +184,11 @@ public class SosService {
         } else {
             auditRun.finish(Instant.now(), 0);
             auditRunRepository.save(auditRun);
-            return violationRepository.findByTripIdOrderByDetectedAtAsc(tripId).stream()
-                    .filter(v -> v.getDedupKey().equals(candidate.getDedupKey()))
-                    .findFirst()
-                    .orElse(candidate);
+            return violationRepository.findByDedupKey(candidate.getDedupKey())
+                    .orElseGet(() -> violationRepository.findByTripIdOrderByDetectedAtAsc(tripId).stream()
+                            .filter(v -> v.getDedupKey().equals(candidate.getDedupKey()))
+                            .findFirst()
+                            .orElse(candidate));
         }
     }
 }

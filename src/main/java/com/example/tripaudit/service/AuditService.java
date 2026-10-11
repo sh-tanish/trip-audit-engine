@@ -29,6 +29,7 @@ import com.example.tripaudit.rules.TripContextFactory;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -53,7 +54,6 @@ public class AuditService {
     private final ViolationRecorder violationRecorder;
     private final AlertDispatcher alertDispatcher;
     private final AuditMetrics auditMetrics;
-    private final SosService sosService;
 
     public AuditService(TripRepository tripRepository,
                         StopRepository stopRepository,
@@ -67,8 +67,7 @@ public class AuditService {
                         AuditProperties auditProperties,
                         ViolationRecorder violationRecorder,
                         AlertDispatcher alertDispatcher,
-                        AuditMetrics auditMetrics,
-                        SosService sosService) {
+                        AuditMetrics auditMetrics) {
         this.tripRepository = tripRepository;
         this.stopRepository = stopRepository;
         this.routeSegmentRepository = routeSegmentRepository;
@@ -82,7 +81,6 @@ public class AuditService {
         this.violationRecorder = violationRecorder;
         this.alertDispatcher = alertDispatcher;
         this.auditMetrics = auditMetrics;
-        this.sosService = sosService;
     }
 
     /**
@@ -117,7 +115,14 @@ public class AuditService {
 
         // 4. Load trip facts via explicit repository queries (no lazy loading)
         List<Stop> stops = stopRepository.findByTripIdOrderBySequenceAsc(tripId);
-        List<Employee> employees = employeeRepository.findAll();
+        List<Long> employeeIds = stops.stream()
+                .map(Stop::getEmployeeId)
+                .filter(Objects::nonNull)
+                .distinct()
+                .toList();
+        List<Employee> employees = employeeIds.isEmpty()
+                ? List.of()
+                : employeeRepository.findAllById(employeeIds);
         List<RouteSegment> segments = routeSegmentRepository.findByTripIdOrderBySeqAsc(tripId);
         List<GpsFix> fixes = gpsFixRepository.findByTripIdOrderByRecordedAtAsc(tripId);
         List<TripEvent> events = tripEventRepository.findByTripIdOrderByOccurredAtAsc(tripId);
@@ -154,8 +159,12 @@ public class AuditService {
                     newOutcomes.add(outcome);
                 }
             } catch (DataIntegrityViolationException ex) {
-                // Caught outside ViolationRecorder's transaction: treat as EXISTING
-                log.debug("Concurrent insert collision for violation dedupKey: {}", candidate.getDedupKey());
+                if (violationRepository.existsByDedupKey(candidate.getDedupKey())) {
+                    // Caught outside ViolationRecorder's transaction: treat as EXISTING
+                    log.debug("Concurrent insert collision for violation dedupKey: {}", candidate.getDedupKey());
+                } else {
+                    throw ex;
+                }
             }
         }
 
@@ -170,20 +179,6 @@ public class AuditService {
         }
 
         return auditRun;
-    }
-
-    /**
-     * Delegates SOS emergency event processing to SosService.
-     */
-    public Violation handleSos(Long tripId, TripEvent event) {
-        return sosService.handleSos(tripId, event);
-    }
-
-    /**
-     * Delegates SOS emergency press processing to SosService.
-     */
-    public Violation handleSos(Long tripId, Long employeeId, Instant pressedAt) {
-        return sosService.handleSos(tripId, employeeId, pressedAt);
     }
 
     /**

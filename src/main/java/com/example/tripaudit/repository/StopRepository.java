@@ -6,4 +6,5 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface StopRepository extends JpaRepository<Stop, Long> {
     List<Stop> findByTripIdOrderBySequenceAsc(Long tripId);
+    boolean existsByTripIdAndEmployeeId(Long tripId, Long employeeId);
 }

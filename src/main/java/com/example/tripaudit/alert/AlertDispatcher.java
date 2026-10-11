@@ -68,7 +68,12 @@ public class AlertDispatcher {
         );
 
         for (AlertDelivery delivery : deliveries) {
-            deliverOne(delivery, message);
+            try {
+                deliverOne(delivery, message);
+            } catch (Exception ex) {
+                log.error("Unexpected error delivering alert for violation {} to channel {}: {}",
+                        delivery.getViolationId(), delivery.getChannel(), ex.getClass().getName());
+            }
         }
     }
 
@@ -85,16 +90,21 @@ public class AlertDispatcher {
 
         log.info("Found {} pending alert deliveries left behind. Dispatching recovery...", pendingDeliveries.size());
         for (AlertDelivery delivery : pendingDeliveries) {
-            violationRepository.findById(delivery.getViolationId()).ifPresent(violation -> {
-                AlertMessage message = new AlertMessage(
-                        violation.getId(),
-                        violation.getTripId(),
-                        violation.getType(),
-                        violation.getSeverity(),
-                        violation.getEvidence()
-                );
-                deliverOne(delivery, message);
-            });
+            try {
+                violationRepository.findById(delivery.getViolationId()).ifPresent(violation -> {
+                    AlertMessage message = new AlertMessage(
+                            violation.getId(),
+                            violation.getTripId(),
+                            violation.getType(),
+                            violation.getSeverity(),
+                            violation.getEvidence()
+                    );
+                    deliverOne(delivery, message);
+                });
+            } catch (Exception ex) {
+                log.error("Unexpected error in dispatchPending for delivery {}: {}",
+                        delivery.getId(), ex.getClass().getName());
+            }
         }
     }
 
@@ -103,14 +113,26 @@ public class AlertDispatcher {
             Notifier notifier = notifierFactory.forChannel(delivery.getChannel());
             notifier.send(message);
             delivery.markSent(Instant.now());
+            safeSave(delivery);
+        } catch (Exception ex) {
+            String errorClass = ex.getClass().getName();
+            if (errorClass.length() > 255) {
+                errorClass = errorClass.substring(0, 255);
+            }
+            log.error("Failed delivering alert for violation {} to channel {}: {}",
+                    delivery.getViolationId(), delivery.getChannel(), errorClass);
+            delivery.markFailed(errorClass, Instant.now());
+            safeSave(delivery);
+            auditMetrics.incrementAlertsFailed();
+        }
+    }
+
+    private void safeSave(AlertDelivery delivery) {
+        try {
             alertDeliveryRepository.save(delivery);
         } catch (Exception ex) {
-            String errorMsg = ex.getMessage() != null ? ex.getMessage() : ex.getClass().getSimpleName();
-            log.error("Failed delivering alert for violation {} to channel {}: {}",
-                    delivery.getViolationId(), delivery.getChannel(), errorMsg);
-            delivery.markFailed(errorMsg, Instant.now());
-            alertDeliveryRepository.save(delivery);
-            auditMetrics.incrementAlertsFailed();
+            log.error("Failed persisting delivery status for delivery {} on violation {}: {}",
+                    delivery.getId(), delivery.getViolationId(), ex.getClass().getName());
         }
     }
 }

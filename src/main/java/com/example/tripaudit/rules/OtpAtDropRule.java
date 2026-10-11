@@ -66,8 +66,9 @@ public class OtpAtDropRule implements SafetyRule {
                         ctx.auditRunId()
                 ));
             } else {
+                // Any event whose otpMatched is false or null counts as NOT matched
                 boolean hasMismatch = stopEvents.stream()
-                        .anyMatch(e -> Boolean.FALSE.equals(e.getOtpMatched()));
+                        .anyMatch(e -> !Boolean.TRUE.equals(e.getOtpMatched()));
 
                 if (hasMismatch) {
                     String evidence = "OTP verification failed (MISMATCH) for drop stop " + stop.getId();

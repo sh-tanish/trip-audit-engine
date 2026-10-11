@@ -19,6 +19,13 @@ import com.example.tripaudit.repository.VehicleRepository;
 import com.example.tripaudit.repository.ViolationRepository;
 import java.time.Instant;
 import java.util.List;
+import com.example.tripaudit.domain.Stop;
+import com.example.tripaudit.domain.StopType;
+import com.example.tripaudit.exception.ForbiddenTripAccessException;
+import com.example.tripaudit.exception.NotFoundException;
+import com.example.tripaudit.repository.AuditRunRepository;
+import com.example.tripaudit.repository.StopRepository;
+import com.example.tripaudit.repository.TripEventRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -52,6 +59,15 @@ class SosServiceIntegrationTest {
     private AlertDeliveryRepository alertDeliveryRepository;
 
     @Autowired
+    private StopRepository stopRepository;
+
+    @Autowired
+    private TripEventRepository tripEventRepository;
+
+    @Autowired
+    private AuditRunRepository auditRunRepository;
+
+    @Autowired
     private NotifierFactory notifierFactory;
 
     private RecordingNotifier controlRoomNotifier;
@@ -71,6 +87,7 @@ class SosServiceIntegrationTest {
         Driver driver = driverRepository.save(new Driver("DRV-SOS-1", "SOS Driver"));
         Vehicle vehicle = vehicleRepository.save(new Vehicle("KA01SOS1234"));
         Trip trip = tripRepository.save(new Trip(driver.getId(), vehicle.getId(), false, Instant.now()));
+        stopRepository.save(new Stop(trip.getId(), 1, StopType.PICKUP, 555L, Instant.now(), null));
 
         Instant pressTime = Instant.parse("2026-10-11T20:00:00Z");
 
@@ -126,6 +143,7 @@ class SosServiceIntegrationTest {
         Driver driver = driverRepository.save(new Driver("DRV-SOS-2", "SOS Driver 2"));
         Vehicle vehicle = vehicleRepository.save(new Vehicle("KA01SOS5678"));
         Trip trip = tripRepository.save(new Trip(driver.getId(), vehicle.getId(), false, Instant.now()));
+        stopRepository.save(new Stop(trip.getId(), 1, StopType.PICKUP, 777L, Instant.now(), null));
 
         Instant pressTime = Instant.parse("2026-10-11T20:30:00Z");
         Long employeeId = 777L;
@@ -141,4 +159,57 @@ class SosServiceIntegrationTest {
         assertEquals(1, transportManagerNotifier.getSendCount());
         assertNull(controlRoomNotifier.getRecordedMessages().getFirst().lat());
     }
+
+    @Test
+    @DisplayName("SOS for unknown trip throws NotFoundException")
+    void sosUnknownTripThrowsNotFoundException() {
+        assertThrows(NotFoundException.class, () ->
+                sosService.handleSos(999999L, 101L, Instant.now()));
+    }
+
+    @Test
+    @DisplayName("SOS for employee with no stop on trip throws ForbiddenTripAccessException")
+    void sosEmployeeWithNoStopThrowsForbidden() {
+        Driver driver = driverRepository.save(new Driver("DRV-SOS-3", "SOS Driver 3"));
+        Vehicle vehicle = vehicleRepository.save(new Vehicle("KA01SOS9999"));
+        Trip trip = tripRepository.save(new Trip(driver.getId(), vehicle.getId(), false, Instant.now()));
+
+        assertThrows(ForbiddenTripAccessException.class, () ->
+                sosService.handleSos(trip.getId(), 999L, Instant.now()));
+    }
+
+    @Test
+    @DisplayName("SOS with null pressedAt uses server time and does not throw NPE")
+    void sosWithNullPressedAtUsesServerTime() {
+        Driver driver = driverRepository.save(new Driver("DRV-SOS-4", "SOS Driver 4"));
+        Vehicle vehicle = vehicleRepository.save(new Vehicle("KA01SOS8888"));
+        Trip trip = tripRepository.save(new Trip(driver.getId(), vehicle.getId(), false, Instant.now()));
+        stopRepository.save(new Stop(trip.getId(), 1, StopType.PICKUP, 444L, Instant.now(), null));
+
+        Violation v = sosService.handleSos(trip.getId(), 444L, null);
+        assertNotNull(v);
+        assertEquals(Severity.CRITICAL, v.getSeverity());
+    }
+
+    @Test
+    @DisplayName("SOS retry deduplication does not save a new TripEvent or AuditRun")
+    void sosRetryDoesNotSaveNewTripEventOrAuditRun() {
+        Driver driver = driverRepository.save(new Driver("DRV-SOS-5", "SOS Driver 5"));
+        Vehicle vehicle = vehicleRepository.save(new Vehicle("KA01SOS7777"));
+        Trip trip = tripRepository.save(new Trip(driver.getId(), vehicle.getId(), false, Instant.now()));
+        stopRepository.save(new Stop(trip.getId(), 1, StopType.PICKUP, 333L, Instant.now(), null));
+
+        Instant pressTime = Instant.parse("2026-10-11T21:00:00Z");
+        sosService.handleSos(trip.getId(), 333L, pressTime);
+
+        long eventCountBefore = tripEventRepository.count();
+        long runCountBefore = auditRunRepository.count();
+
+        // Retry same SOS
+        sosService.handleSos(trip.getId(), 333L, pressTime);
+
+        assertEquals(eventCountBefore, tripEventRepository.count(), "Retry must not save new TripEvent");
+        assertEquals(runCountBefore, auditRunRepository.count(), "Retry must not save new AuditRun");
+    }
 }
+

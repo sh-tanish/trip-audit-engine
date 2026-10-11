@@ -7,6 +7,7 @@ import com.example.tripaudit.domain.Severity;
 import com.example.tripaudit.domain.Stop;
 import com.example.tripaudit.domain.StopType;
 import com.example.tripaudit.domain.TripEvent;
+import com.example.tripaudit.domain.TripEventType;
 import com.example.tripaudit.domain.Violation;
 import com.example.tripaudit.domain.ViolationType;
 import java.time.Instant;
@@ -117,5 +118,52 @@ class OtpAtDropRuleTest {
         List<Violation> violations = rule.evaluate(ctx);
         // Only 1 violation emitted for this stop
         assertThat(violations).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("OTP_ENTERED with null otpMatched counts as NOT matched and triggers OTP_MISMATCH")
+    void nullOtpMatchedCountsAsNotMatched() {
+        Long tripId = 24L;
+        Instant now = Instant.parse("2026-10-11T12:00:00Z");
+
+        Employee emp = TestFixtures.employee(1L, "EMP-101", Gender.MALE);
+        Stop drop = TestFixtures.stop(2L, tripId, 1, StopType.DROP, emp.getId(), now.plusSeconds(600), "9999");
+
+        // Event with otpMatched == null
+        TripEvent nullOtpEvent = new TripEvent(tripId, TripEventType.OTP_ENTERED, now.plusSeconds(605), drop.getId(), null, null, now.plusSeconds(605));
+
+        TripContext ctx = TripContextFactory.create(
+                tripId, "run-1", detectedAt, false,
+                List.of(drop), List.of(emp), List.of(), List.of(), List.of(nullOtpEvent), config
+        );
+
+        List<Violation> violations = rule.evaluate(ctx);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.get(0).getType()).isEqualTo(ViolationType.OTP_MISMATCH);
+        assertThat(violations.get(0).getEvidence()).contains("OTP verification failed (MISMATCH)");
+    }
+
+    @Test
+    @DisplayName("Wrong OTP then a correct one still gives OTP_MISMATCH")
+    void wrongOtpThenCorrectOtpStillGivesOtpMismatch() {
+        Long tripId = 25L;
+        Instant now = Instant.parse("2026-10-11T12:00:00Z");
+
+        Employee emp = TestFixtures.employee(1L, "EMP-101", Gender.MALE);
+        Stop drop = TestFixtures.stop(2L, tripId, 1, StopType.DROP, emp.getId(), now.plusSeconds(600), "9999");
+
+        // First attempt: wrong OTP
+        TripEvent wrongOtp = TestFixtures.otpEvent(101L, tripId, drop.getId(), false, now.plusSeconds(605));
+        // Second attempt: correct OTP
+        TripEvent correctOtp = TestFixtures.otpEvent(102L, tripId, drop.getId(), true, now.plusSeconds(615));
+
+        TripContext ctx = TripContextFactory.create(
+                tripId, "run-1", detectedAt, false,
+                List.of(drop), List.of(emp), List.of(), List.of(), List.of(wrongOtp, correctOtp), config
+        );
+
+        List<Violation> violations = rule.evaluate(ctx);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.get(0).getType()).isEqualTo(ViolationType.OTP_MISMATCH);
     }
 }

@@ -143,4 +143,83 @@ class OverSpeedRuleTest {
 
         assertThat(rule.evaluate(ctx)).isEmpty();
     }
+
+    @Test
+    @DisplayName("Speed equal to limit => no violation")
+    void speedEqualToLimitGivesNoViolation() {
+        Long tripId = 205L;
+        Instant start = Instant.parse("2026-10-11T12:00:00Z");
+
+        // 3 fixes at exactly 50.0 km/h in 50 km/h zone
+        List<GpsFix> fixes = List.of(
+                new GpsFix(tripId, start, 12.9716, 77.5950, 50.0),
+                new GpsFix(tripId, start.plusSeconds(30), 12.9716, 77.6000, 50.0),
+                new GpsFix(tripId, start.plusSeconds(60), 12.9716, 77.6050, 50.0)
+        );
+
+        TripContext ctx = TripContextFactory.create(
+                tripId, "run-1", detectedAt, false,
+                List.of(), List.of(), List.of(segment0), fixes, List.of(), config
+        );
+
+        List<Violation> violations = rule.evaluate(ctx);
+        assertThat(violations).isEmpty();
+    }
+
+    @Test
+    @DisplayName("Speed ratio exactly 1.5x limit => MEDIUM severity (not CRITICAL)")
+    void speedRatioExactlyOnePointFiveGivesMedium() {
+        Long tripId = 206L;
+        Instant start = Instant.parse("2026-10-11T12:00:00Z");
+
+        // 75.0 km/h in 50.0 km/h zone gives ratio = 1.5 exactly
+        List<GpsFix> fixes = List.of(
+                new GpsFix(tripId, start, 12.9716, 77.5950, 75.0),
+                new GpsFix(tripId, start.plusSeconds(30), 12.9716, 77.6000, 75.0)
+        );
+
+        TripContext ctx = TripContextFactory.create(
+                tripId, "run-1", detectedAt, false,
+                List.of(), List.of(), List.of(segment0), fixes, List.of(), config
+        );
+
+        List<Violation> violations = rule.evaluate(ctx);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.get(0).getSeverity()).isEqualTo(Severity.MEDIUM);
+    }
+
+    @Test
+    @DisplayName("Speeding across two segments with different limits => single continuous run violation")
+    void speedingAcrossTwoSegmentsWithDifferentLimits() {
+        Long tripId = 207L;
+        Instant start = Instant.parse("2026-10-11T12:00:00Z");
+
+        RouteSegment seg0 = TestFixtures.segment(
+                1L, tripId, 0,
+                new GeoPoint(12.9716, 77.5900),
+                new GeoPoint(12.9716, 77.6000),
+                40.0 // 40 km/h limit
+        );
+        RouteSegment seg1 = TestFixtures.segment(
+                2L, tripId, 1,
+                new GeoPoint(12.9716, 77.6000),
+                new GeoPoint(12.9716, 77.6100),
+                60.0 // 60 km/h limit
+        );
+
+        // Fix 1 on seg0 at 50 km/h (> 40), Fix 2 on seg1 at 70 km/h (> 60)
+        List<GpsFix> fixes = List.of(
+                new GpsFix(tripId, start, 12.9716, 77.5950, 50.0),
+                new GpsFix(tripId, start.plusSeconds(30), 12.9716, 77.6050, 70.0)
+        );
+
+        TripContext ctx = TripContextFactory.create(
+                tripId, "run-1", detectedAt, false,
+                List.of(), List.of(), List.of(seg0, seg1), fixes, List.of(), config
+        );
+
+        List<Violation> violations = rule.evaluate(ctx);
+        assertThat(violations).hasSize(1);
+        assertThat(violations.get(0).getType()).isEqualTo(ViolationType.OVER_SPEED);
+    }
 }
