@@ -1,0 +1,27 @@
+spring:
+  application:
+    name: trip-audit
+  profiles:
+    active: dev
+  datasource:
+    url: jdbc:h2:mem:tripaudittest;DB_CLOSE_DELAY=-1
+    username: sa
+    password: ""
+  jpa:
+    open-in-view: false
+    hibernate:
+      ddl-auto: create-drop
+
+audit:
+  zone: Asia/Kolkata
+  night:
+    start: "22:00"
+    end: "06:00"
+  route:
+    threshold-meters: 500
+    min-duration: 120s
+  speed:
+    min-duration: 30s
+    critical-factor: 1.5
+  gps:
+    max-gap: 60s

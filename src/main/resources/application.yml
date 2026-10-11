@@ -1,0 +1,34 @@
+spring:
+  application:
+    name: trip-audit
+  profiles:
+    # dev is active by default so `./mvnw spring-boot:run` seeds demo data with no extra flags.
+    # Tests override this with @ActiveProfiles.
+    active: dev
+  datasource:
+    # H2 in file mode: data survives restarts (which is why the seeder checks "is the DB empty?").
+    url: jdbc:h2:file:./data/tripaudit
+    username: sa
+    password: ""
+  jpa:
+    # Relationships are plain id columns and AuditService has no transaction,
+    # so nothing may lazy-load in the web layer.
+    open-in-view: false
+    hibernate:
+      ddl-auto: update
+
+# Defaults for the safety rules. Every key is documented in the README (later slice).
+audit:
+  zone: Asia/Kolkata
+  night:
+    # Window is [start, end) and may cross midnight. start == end disables it.
+    start: "22:00"
+    end: "06:00"
+  route:
+    threshold-meters: 500
+    min-duration: 120s
+  speed:
+    min-duration: 30s
+    critical-factor: 1.5
+  gps:
+    max-gap: 60s

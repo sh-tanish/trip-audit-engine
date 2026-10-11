@@ -34,3 +34,7 @@ build/
 AGENTS.md
 PROMPTS.md
 docs/case-study.md
+docs/ASSUMPTIONS.md
+docs/DESIGN.md
+### H2 file database ###
+data/

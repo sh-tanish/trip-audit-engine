@@ -1,0 +1,94 @@
+{
+  "tripCode": "TRIP-D-OVERSPEED",
+  "driver": {
+    "driverCode": "DRV-104",
+    "name": "Kapil Dev"
+  },
+  "vehicle": {
+    "registrationNumber": "KA01AB1004"
+  },
+  "escortAssigned": false,
+  "createdAt": "2026-10-11T10:25:00Z",
+  "completedAt": "2026-10-11T10:42:00Z",
+  "employees": [
+    {
+      "employeeCode": "EMP-401",
+      "gender": "MALE"
+    }
+  ],
+  "stops": [
+    {
+      "sequence": 1,
+      "type": "PICKUP",
+      "employeeCode": "EMP-401",
+      "plannedTime": "2026-10-11T10:30:00Z",
+      "expectedOtp": null
+    },
+    {
+      "sequence": 2,
+      "type": "DROP",
+      "employeeCode": "EMP-401",
+      "plannedTime": "2026-10-11T10:40:00Z",
+      "expectedOtp": "4444"
+    }
+  ],
+  "routeSegments": [
+    {
+      "seq": 0,
+      "startLat": 12.9716,
+      "startLon": 77.5900,
+      "endLat": 12.9716,
+      "endLon": 77.6200,
+      "speedLimitKmph": 50.0
+    },
+    {
+      "seq": 1,
+      "startLat": 12.9716,
+      "startLon": 77.6200,
+      "endLat": 12.9716,
+      "endLon": 77.6500,
+      "speedLimitKmph": 40.0
+    }
+  ],
+  "gpsFixes": [
+    { "recordedAt": "2026-10-11T10:30:00Z", "lat": 12.9716, "lon": 77.5900, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:30:30Z", "lat": 12.9716, "lon": 77.5930, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:31:00Z", "lat": 12.9716, "lon": 77.5960, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:31:30Z", "lat": 12.9716, "lon": 77.5990, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:32:00Z", "lat": 12.9716, "lon": 77.6020, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:32:30Z", "lat": 12.9716, "lon": 77.6050, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:33:00Z", "lat": 12.9716, "lon": 77.6080, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:33:30Z", "lat": 12.9716, "lon": 77.6110, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:34:00Z", "lat": 12.9716, "lon": 77.6140, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:34:30Z", "lat": 12.9716, "lon": 77.6170, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:35:00Z", "lat": 12.9716, "lon": 77.6250, "speedKmph": 65.0 },
+    { "recordedAt": "2026-10-11T10:35:30Z", "lat": 12.9716, "lon": 77.6280, "speedKmph": 65.0 },
+    { "recordedAt": "2026-10-11T10:36:00Z", "lat": 12.9716, "lon": 77.6310, "speedKmph": 65.0 },
+    { "recordedAt": "2026-10-11T10:36:30Z", "lat": 12.9716, "lon": 77.6340, "speedKmph": 65.0 },
+    { "recordedAt": "2026-10-11T10:37:00Z", "lat": 12.9716, "lon": 77.6370, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:37:30Z", "lat": 12.9716, "lon": 77.6400, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:38:00Z", "lat": 12.9716, "lon": 77.6430, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:38:30Z", "lat": 12.9716, "lon": 77.6460, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:39:00Z", "lat": 12.9716, "lon": 77.6490, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:39:30Z", "lat": 12.9716, "lon": 77.6500, "speedKmph": 35.0 },
+    { "recordedAt": "2026-10-11T10:40:00Z", "lat": 12.9716, "lon": 77.6500, "speedKmph": 30.0 },
+    { "recordedAt": "2026-10-11T10:40:30Z", "lat": 12.9716, "lon": 77.6500, "speedKmph": 20.0 },
+    { "recordedAt": "2026-10-11T10:41:00Z", "lat": 12.9716, "lon": 77.6500, "speedKmph": 10.0 },
+    { "recordedAt": "2026-10-11T10:41:30Z", "lat": 12.9716, "lon": 77.6500, "speedKmph": 5.0 },
+    { "recordedAt": "2026-10-11T10:42:00Z", "lat": 12.9716, "lon": 77.6500, "speedKmph": 0.0 }
+  ],
+  "events": [
+    {
+      "type": "OTP_ENTERED",
+      "occurredAt": "2026-10-11T10:40:00Z",
+      "stopSequence": 2,
+      "otpMatched": true
+    },
+    {
+      "type": "TRIP_COMPLETED",
+      "occurredAt": "2026-10-11T10:42:00Z",
+      "stopSequence": null,
+      "otpMatched": null
+    }
+  ]
+}
