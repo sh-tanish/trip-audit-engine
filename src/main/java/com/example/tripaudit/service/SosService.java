@@ -71,23 +71,32 @@ public class SosService {
         this.stopRepository = stopRepository;
     }
 
+    public record SosResult(Violation violation, boolean isNew) {}
+
     /**
      * Handles an SOS event for a trip from an explicit TripEvent.
      */
     public Violation handleSos(Long tripId, TripEvent event) {
         Instant pressedAt = event != null ? event.getOccurredAt() : null;
         Long employeeId = event != null ? event.getEmployeeId() : null;
-        return handleSos(tripId, employeeId, pressedAt, event);
+        return handleSosInternal(tripId, employeeId, pressedAt, event).violation();
     }
 
     /**
-     * Handles an SOS press by tripId, employeeId, and pressedAt timestamp.
+     * Handles an SOS press by tripId, employeeId, and pressedAt timestamp, returning the Violation.
      */
     public Violation handleSos(Long tripId, Long employeeId, Instant pressedAt) {
-        return handleSos(tripId, employeeId, pressedAt, null);
+        return processSos(tripId, employeeId, pressedAt).violation();
     }
 
-    private Violation handleSos(Long tripId, Long employeeId, Instant pressedAt, TripEvent providedEvent) {
+    /**
+     * Processes an SOS press and reports whether the violation was newly created or an exact retry.
+     */
+    public SosResult processSos(Long tripId, Long employeeId, Instant pressedAt) {
+        return handleSosInternal(tripId, employeeId, pressedAt, null);
+    }
+
+    private SosResult handleSosInternal(Long tripId, Long employeeId, Instant pressedAt, TripEvent providedEvent) {
         // 1. If pressedAt is null, use the server's current time
         Instant effectivePressedAt = pressedAt != null ? pressedAt : Instant.now();
 
@@ -105,11 +114,12 @@ public class SosService {
 
         // If that violation already exists, return existing result without saving a new TripEvent or AuditRun
         if (violationRepository.existsByDedupKey(dedupKey)) {
-            return violationRepository.findByDedupKey(dedupKey)
+            Violation existing = violationRepository.findByDedupKey(dedupKey)
                     .orElseGet(() -> violationRepository.findByTripIdOrderByDetectedAtAsc(tripId).stream()
                             .filter(v -> v.getDedupKey().equals(dedupKey))
                             .findFirst()
                             .orElseThrow());
+            return new SosResult(existing, false);
         }
 
         // 4. Save TripEvent
@@ -180,15 +190,16 @@ public class SosService {
             auditRunRepository.save(auditRun);
             auditMetrics.incrementSos();
             alertDispatcher.dispatch(outcome.violation(), outcome.pendingDeliveries(), lat, lon);
-            return outcome.violation();
+            return new SosResult(outcome.violation(), true);
         } else {
             auditRun.finish(Instant.now(), 0);
             auditRunRepository.save(auditRun);
-            return violationRepository.findByDedupKey(candidate.getDedupKey())
+            Violation existing = violationRepository.findByDedupKey(candidate.getDedupKey())
                     .orElseGet(() -> violationRepository.findByTripIdOrderByDetectedAtAsc(tripId).stream()
                             .filter(v -> v.getDedupKey().equals(candidate.getDedupKey()))
                             .findFirst()
                             .orElse(candidate));
+            return new SosResult(existing, false);
         }
     }
 }

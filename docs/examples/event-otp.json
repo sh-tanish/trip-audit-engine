@@ -1,0 +1,6 @@
+{
+  "type": "OTP_ENTERED",
+  "stopId": 3,
+  "otp": "1934",
+  "occurredAt": "2026-10-11T22:46:00+05:30"
+}

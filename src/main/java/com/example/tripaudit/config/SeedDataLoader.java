@@ -116,6 +116,8 @@ public class SeedDataLoader implements ApplicationRunner {
                 trip.complete(completedAt);
                 trip = tripRepository.save(trip);
                 Long tripId = trip.getId();
+                String tripName = root.hasNonNull("tripCode") ? root.get("tripCode").asText() : resourcePath;
+                log.info("Seeded trip: id={}, name={}", tripId, tripName);
 
                 // 5. Stops
                 Map<Integer, Stop> stopsBySeq = new HashMap<>();

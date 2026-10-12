@@ -1,0 +1,215 @@
+{
+  "info": {
+    "_postman_id": "7fbc6c43-9a3b-4861-bb17-7e61bc8df952",
+    "name": "Trip Safety & Compliance Audit Engine API",
+    "description": "Postman collection covering all REST endpoints for trip creation, GPS ingestion, lifecycle events, SOS triggers, audit execution, and violation retrieval.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Trips",
+      "item": [
+        {
+          "name": "Create Trip",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"driver\": {\n    \"driverCode\": \"DRV-DEMO\",\n    \"name\": \"Rajesh Kumar\"\n  },\n  \"vehicle\": {\n    \"registrationNumber\": \"KA01AB9999\"\n  },\n  \"escortAssigned\": false,\n  \"employees\": [\n    {\n      \"employeeCode\": \"EMP-101\",\n      \"gender\": \"FEMALE\"\n    },\n    {\n      \"employeeCode\": \"EMP-102\",\n      \"gender\": \"MALE\"\n    }\n  ],\n  \"stops\": [\n    {\n      \"sequence\": 1,\n      \"type\": \"PICKUP\",\n      \"employeeCode\": \"EMP-102\",\n      \"plannedTime\": \"2026-10-11T22:00:00+05:30\",\n      \"otp\": null\n    },\n    {\n      \"sequence\": 2,\n      \"type\": \"PICKUP\",\n      \"employeeCode\": \"EMP-101\",\n      \"plannedTime\": \"2026-10-11T22:15:00+05:30\",\n      \"otp\": null\n    },\n    {\n      \"sequence\": 3,\n      \"type\": \"DROP\",\n      \"employeeCode\": \"EMP-102\",\n      \"plannedTime\": \"2026-10-11T22:45:00+05:30\",\n      \"otp\": \"1934\"\n    },\n    {\n      \"sequence\": 4,\n      \"type\": \"DROP\",\n      \"employeeCode\": \"EMP-101\",\n      \"plannedTime\": \"2026-10-11T23:10:00+05:30\",\n      \"otp\": \"4821\"\n    }\n  ],\n  \"route\": {\n    \"points\": [\n      [12.9716, 77.5946],\n      [12.9352, 77.6245],\n      [12.9081, 77.6476]\n    ],\n    \"speedLimitsKmph\": [50.0, 40.0]\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips"]
+            }
+          }
+        },
+        {
+          "name": "Ingest GPS Batch",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fixes\": [\n    {\n      \"recordedAt\": \"2026-10-11T22:05:00+05:30\",\n      \"lat\": 12.9710,\n      \"lon\": 77.5950,\n      \"speedKmph\": 35.0\n    },\n    {\n      \"recordedAt\": \"2026-10-11T22:10:00+05:30\",\n      \"lat\": 12.9600,\n      \"lon\": 77.6050,\n      \"speedKmph\": 42.5\n    },\n    {\n      \"recordedAt\": \"2026-10-11T22:15:00+05:30\",\n      \"lat\": 12.9450,\n      \"lon\": 77.6150,\n      \"speedKmph\": 38.0\n    }\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/gps",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "gps"]
+            }
+          }
+        },
+        {
+          "name": "Record Event - OTP Entered",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"OTP_ENTERED\",\n  \"stopId\": 3,\n  \"otp\": \"1934\",\n  \"occurredAt\": \"2026-10-11T22:46:00+05:30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "events"]
+            }
+          }
+        },
+        {
+          "name": "Record Event - Escort Assigned",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ESCORT_ASSIGNED\",\n  \"occurredAt\": \"2026-10-11T22:20:00+05:30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "events"]
+            }
+          }
+        },
+        {
+          "name": "Record Event - Escort Removed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"ESCORT_REMOVED\",\n  \"occurredAt\": \"2026-10-11T23:00:00+05:30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "events"]
+            }
+          }
+        },
+        {
+          "name": "Record Event - Trip Completed",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"TRIP_COMPLETED\",\n  \"occurredAt\": \"2026-10-11T23:15:00+05:30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/events",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "events"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Emergency SOS",
+      "item": [
+        {
+          "name": "Trigger SOS Panic Press",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"employeeId\": 1,\n  \"pressedAt\": \"2026-10-11T22:31:07+05:30\"\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/sos",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "sos"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Audit & Compliance",
+      "item": [
+        {
+          "name": "Run Trip Audit",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/audit",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "audit"]
+            }
+          }
+        },
+        {
+          "name": "Get Trip Violations",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/trips/1/violations",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "trips", "1", "violations"]
+            }
+          }
+        },
+        {
+          "name": "Get Violation By ID",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/violations/1",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "v1", "violations", "1"]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

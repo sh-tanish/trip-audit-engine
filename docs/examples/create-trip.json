@@ -1,0 +1,58 @@
+{
+  "driver": {
+    "driverCode": "DRV-DEMO",
+    "name": "Rajesh Kumar"
+  },
+  "vehicle": {
+    "registrationNumber": "KA01AB9999"
+  },
+  "escortAssigned": false,
+  "employees": [
+    {
+      "employeeCode": "EMP-101",
+      "gender": "FEMALE"
+    },
+    {
+      "employeeCode": "EMP-102",
+      "gender": "MALE"
+    }
+  ],
+  "stops": [
+    {
+      "sequence": 1,
+      "type": "PICKUP",
+      "employeeCode": "EMP-102",
+      "plannedTime": "2026-10-11T22:00:00+05:30",
+      "otp": null
+    },
+    {
+      "sequence": 2,
+      "type": "PICKUP",
+      "employeeCode": "EMP-101",
+      "plannedTime": "2026-10-11T22:15:00+05:30",
+      "otp": null
+    },
+    {
+      "sequence": 3,
+      "type": "DROP",
+      "employeeCode": "EMP-102",
+      "plannedTime": "2026-10-11T22:45:00+05:30",
+      "otp": "1934"
+    },
+    {
+      "sequence": 4,
+      "type": "DROP",
+      "employeeCode": "EMP-101",
+      "plannedTime": "2026-10-11T23:10:00+05:30",
+      "otp": "4821"
+    }
+  ],
+  "route": {
+    "points": [
+      [12.9716, 77.5946],
+      [12.9352, 77.6245],
+      [12.9081, 77.6476]
+    ],
+    "speedLimitsKmph": [50.0, 40.0]
+  }
+}

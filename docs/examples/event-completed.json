@@ -1,0 +1,6 @@
+{
+  "type": "TRIP_COMPLETED",
+  "stopId": null,
+  "otp": null,
+  "occurredAt": "2026-10-11T23:15:00+05:30"
+}
