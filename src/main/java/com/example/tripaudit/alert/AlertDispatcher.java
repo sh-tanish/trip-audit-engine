@@ -57,14 +57,17 @@ public class AlertDispatcher {
             return;
         }
 
+        Double latToPass = (violation.getType() == com.example.tripaudit.domain.ViolationType.SOS) ? lat : null;
+        Double lonToPass = (violation.getType() == com.example.tripaudit.domain.ViolationType.SOS) ? lon : null;
+
         AlertMessage message = new AlertMessage(
                 violation.getId(),
                 violation.getTripId(),
                 violation.getType(),
                 violation.getSeverity(),
                 violation.getEvidence(),
-                lat,
-                lon
+                latToPass,
+                lonToPass
         );
 
         for (AlertDelivery delivery : deliveries) {

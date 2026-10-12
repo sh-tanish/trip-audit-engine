@@ -17,6 +17,13 @@ public record AlertMessage(
         Double lat,
         Double lon
 ) {
+    public AlertMessage {
+        if (type != ViolationType.SOS) {
+            lat = null;
+            lon = null;
+        }
+    }
+
     public AlertMessage(Long violationId, Long tripId, ViolationType type, Severity severity, String summary) {
         this(violationId, tripId, type, severity, summary, null, null);
     }

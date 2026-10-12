@@ -21,7 +21,7 @@ public class SmsNotifierStub implements Notifier {
 
     @Override
     public void send(AlertMessage msg) {
-        if (msg.lat() != null && msg.lon() != null) {
+        if (msg.type() == com.example.tripaudit.domain.ViolationType.SOS && msg.lat() != null && msg.lon() != null) {
             log.info("[SMS -> CONTROL_ROOM] SOS Emergency! Trip: {}, Violation: {}, Severity: {}, Summary: {}, Location: ({}, {})",
                     msg.tripId(), msg.violationId(), msg.severity(), msg.summary(), msg.lat(), msg.lon());
         } else {
